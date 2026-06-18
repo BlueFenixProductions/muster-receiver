@@ -11,8 +11,9 @@ describe('buildPrompt', () => {
   test('names the agent, the asker, and carries the message text', () => {
     const p = buildPrompt(AGENT, MSG);
     expect(p).toMatch(/You are "ironquill"/);
-    expect(p).toMatch(/Captain addressed you/);
+    expect(p).toMatch(/Captain just addressed you/);
     expect(p).toMatch(/status\?/);
+    expect(p).toMatch(/system\s+posts it for you/); // tells the agent not to self-post
   });
 });
 

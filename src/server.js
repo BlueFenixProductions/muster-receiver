@@ -47,11 +47,22 @@ function readBody(req) {
   });
 }
 
+// POST the reply, retrying once on a transient failure (a tailnet/TLS hiccup
+// shouldn't lose a hard-won agent reply).
+async function postReplyResilient(base, replyPath, text) {
+  try {
+    return await postReply(base, replyPath, text);
+  } catch (e) {
+    await new Promise((r) => setTimeout(r, 1500));
+    return postReply(base, replyPath, text);
+  }
+}
+
 // Wake the agent and post its reply. Returns a small result for the log.
 async function handleMessage(agent, msg, base) {
   const reply = await wakeAgent(agent, msg);
   if (!reply || !reply.trim()) return { action: 'empty-reply' };
-  const res = await postReply(base, msg.replyPath, reply);
+  const res = await postReplyResilient(base, msg.replyPath, reply);
   return { action: 'posted', status: res.status };
 }
 

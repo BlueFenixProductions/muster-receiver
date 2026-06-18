@@ -84,8 +84,8 @@ describe('login → say → poll (mock Campfire)', () => {
           if (!ok) return res.writeHead(422).end('csrf');
           return res.writeHead(302, { 'Set-Cookie': 'session_token=SESS; Path=/; HttpOnly', Location: '/' }).end();
         }
-        // POST bot message
-        const botPost = req.url.match(/^\/rooms\/(\d+)\/bot\/([^/]+)\/messages$/);
+        // POST bot message — real path is /rooms/:id/:bot_key/messages (no /bot/)
+        const botPost = req.url.match(/^\/rooms\/(\d+)\/([^/]+)\/messages$/);
         if (req.method === 'POST' && botPost) {
           posted.push({ room: botPost[1], key: botPost[2], text: body });
           return res.writeHead(201).end('created');

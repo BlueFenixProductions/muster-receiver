@@ -29,7 +29,7 @@ Campfire (madara, container)                 muster-receiver (Itachi, tailnet)
   name. `204` suppresses the inline path; the only reply is the async one we
   POST to `room.path`.
 - **`room.path` carries the `bot_key`.** The webhook hands us
-  `/rooms/:id/bot/:bot_key/messages` — the reply target *with auth baked in* — so
+  `/rooms/:id/:bot_key/messages` — the reply target *with auth baked in* — so
   the receiver never stores bot_keys. We reply *as* whichever bot was addressed.
 - **@mention-gated wake.** In a normal room Campfire only delivers to
   `@message.mentionees.active_bots` (and never the message's own creator). So
@@ -40,9 +40,10 @@ Campfire (madara, container)                 muster-receiver (Itachi, tailnet)
   model). The URL slug picks who was addressed; an unknown slug is refused —
   never a default identity. Shared identity = crossed wires; the design forbids
   it structurally.
-- **Tailnet-only security.** Campfire signs nothing. Bind to Itachi's tailscale
-  IP (`MUSTER_BIND_HOST`), never a public interface. Optional `?token=` shared
-  secret as belt-and-suspenders.
+- **Tailnet-only security.** Campfire signs nothing, so the `?token=` shared
+  secret (`MUSTER_WEBHOOK_TOKEN`) on each webhook URL is the app-level gate, on
+  top of the host not being publicly reachable. (On macOS/launchd bind `0.0.0.0`,
+  not the tailscale IP — see deploy notes — so the token is doing real work.)
 
 ## Layout
 
@@ -61,54 +62,59 @@ whole loop with a fake `claude` and a mock Campfire.
 
 ## Standing it up
 
-### 1. Create the bot (Campfire admin UI — one per agent)
+> Deployed live 2026-06-17: receiver on **Itachi** under launchd, bot **ironquill**
+> in room **muster** (id 3), full loop verified. The steps below are exactly what
+> worked (incl. the macOS gotchas the live bring-up exposed).
 
-`campfire.bluefenix.net` → **Settings → Bots → New bot**:
+### 1. Deploy the receiver on Itachi (macOS, tailnet `100.70.94.58`)
 
-- **Name:** the agent handle, e.g. `ironquill`.
-- **Webhook URL:** `http://100.70.94.58:8788/campfire/<slug>` — the `<slug>` must
-  match the roster key and the agent's intent. With a token:
-  `http://100.70.94.58:8788/campfire/ironquill?token=<MUSTER_WEBHOOK_TOKEN>`.
+Prereqs: `node >=18`, **Claude Code installed + authenticated** as the login user
+(the receiver runs `claude -p`). The runtime has **no npm deps** (pure node).
 
-Campfire shows the bot's **`bot_key`** once. You don't paste it anywhere — it
-arrives inside `room.path` on every webhook — but note it: it's a secret (anyone
-with it can post as the bot). Add the bot to the war-room **room**, then
-@mention it to test.
-
-> **The one wiring rule:** the URL slug (`/campfire/<slug>`) must equal the
-> `roster.json` key. That pairing is what keeps the right agent answering as the
-> right bot.
-
-### 2. Deploy on Itachi (macOS, tailnet `100.70.94.58`)
-
-Prereqs: `node >=18`, and **Claude Code installed + authenticated** as the login
-user (the receiver runs `claude -p` under launchd).
+**macOS TCC:** a launchd agent **cannot read `~/Documents`** and **cannot bind a
+specific non-loopback IP** (Local Network privacy). So run from outside
+`~/Documents` and bind `0.0.0.0`:
 
 ```sh
-git clone https://github.com/BlueFenixProductions/muster-receiver.git
-cd muster-receiver && npm install --omit=dev
-cp config.env.example config.env        # set MUSTER_BIND_HOST, token, etc.
-cp roster.example.json roster.json      # one entry per bot you created
-npm test                                # sanity
+git clone https://github.com/BlueFenixProductions/muster-receiver.git ~/srv/muster-receiver
+cd ~/srv/muster-receiver
+cp config.env.example config.env     # MUSTER_BIND_HOST=0.0.0.0, set MUSTER_WEBHOOK_TOKEN
+cp roster.example.json roster.json   # one entry per bot; cwd/persona/model per agent
 
-# launchd
 sed "s#__DIR__#$PWD#g" bin/muster-receiver.plist.tmpl \
   > ~/Library/LaunchAgents/net.bluefenix.muster-receiver.plist
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/net.bluefenix.muster-receiver.plist
-launchctl kickstart -k gui/$(id -u)/net.bluefenix.muster-receiver
-tail -f receiver.log
+curl -fsS http://100.70.94.58:8788/health   # -> ok
 ```
 
-### 3. Verify container → tailnet reach
+### 2. Create the bot
 
-Campfire runs in a **Coolify container on madara**; its `Net::HTTP` POST must
-reach Itachi's tailscale IP. From madara:
+Either the admin UI (**Settings → Bots → New bot**) or, since the Campfire
+container is on madara, programmatically via `rails runner` (no UI):
+
+```ruby
+# docker exec -i <campfire-container> bin/rails runner -
+token = "<MUSTER_WEBHOOK_TOKEN>"
+chris = User.find_by!(email_address: "you@example.com")
+room  = Rooms::Open.find_or_create_by!(name: "muster") { |r| r.creator = chris }
+bot   = User.create_bot!(name: "ironquill",
+          webhook_url: "http://100.70.94.58:8788/campfire/ironquill?token=#{token}")
+room.memberships.grant_to(bot) unless room.users.exists?(bot.id)
+puts bot.bot_key   # secret; you don't store it — it rides in room.path
+```
+
+> **The one wiring rule:** the webhook URL slug (`/campfire/<slug>`) must equal the
+> `roster.json` key. That pairing keeps the right agent answering as the right bot.
+
+### 3. Container → Itachi reachability
+
+Campfire's `Net::HTTP` POST must reach Itachi. Verified working over the tailnet
+with no docker-network changes:
 
 ```sh
-docker exec <campfire-container> curl -s -o /dev/null -w '%{http_code}\n' \
-  http://100.70.94.58:8788/health   # want 200
+docker exec <campfire-container> \
+  ruby -rnet/http -e 'puts Net::HTTP.get(URI("http://100.70.94.58:8788/health"))'   # -> ok
 ```
 
-If the container can't see the tailnet, give it host networking or route the
-tailscale CGNAT range (`100.64.0.0/10`) to the host — otherwise the webhook
-silently times out and Campfire posts *"Failed to respond within 7 seconds."*
+If it can't reach, the webhook times out and Campfire posts *"Failed to respond
+within 7 seconds."* in the bot's name.

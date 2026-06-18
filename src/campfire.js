@@ -3,9 +3,10 @@
 // (app/models/webhook.rb#payload):
 //
 //   { user:    { id, name },
-//     room:    { id, name, path: "/rooms/:id/bot/:bot_key/messages" },
+//     room:    { id, name, path: "/rooms/:id/:bot_key/messages" },
 //     message: { id, body: { html, plain }, path } }
 //
+// (Verified live: the path is /rooms/:id/:bot_key/messages — NO "bot" segment.)
 // room.path is the reply target with the bot_key ALREADY baked in — so the
 // receiver never has to store bot_keys. Campfire tells us how to reply as the
 // bot that was addressed; posting to that path authenticates via the key

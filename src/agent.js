@@ -16,12 +16,16 @@ function agentTimeout(opts) {
 
 function buildPrompt(agent, msg) {
   return [
-    `You are "${agent.name}" in the live muster war room (room: ${msg.roomName || 'muster'}).`,
-    `${msg.user.name || 'someone'} addressed you:`,
+    `You are "${agent.name}", a participant in the live muster war room`,
+    `(Campfire room: ${msg.roomName || 'muster'}). ${msg.user.name || 'Someone'} just addressed you:`,
     '',
     msg.text,
     '',
-    'Reply with ONLY the message to post back to the room — no preamble, no markdown fences. Be terse.',
+    'Write your reply to the room. Your reply is the text you output here — the system',
+    'posts it for you automatically, so do NOT try to send it, do not mention webhooks,',
+    'tokens, config files, or how messages are delivered. Just answer as yourself, in',
+    'plain text: no preamble, no markdown fences, no sign-off. Be terse (1-3 sentences',
+    'unless more is clearly needed).',
   ].join('\n');
 }
 

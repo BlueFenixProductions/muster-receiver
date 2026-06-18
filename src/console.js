@@ -100,8 +100,10 @@ async function login(base, email, password, opts = {}) {
 }
 
 // Post a message AS A BOT (CSRF-exempt). Body is the raw message text.
+// Path is /rooms/:id/:bot_key/messages — NO "bot" segment (verified live against
+// the deployed route helper room_bot_messages_path).
 function say(base, roomId, botKey, text, opts = {}) {
-  const url = new URL(`/rooms/${roomId}/bot/${botKey}/messages`, base).href;
+  const url = new URL(`/rooms/${roomId}/${botKey}/messages`, base).href;
   return request('POST', url, { ...opts, headers: { 'Content-Type': 'text/plain; charset=utf-8' }, body: String(text) }).then(
     (r) => ({ status: r.status })
   );
