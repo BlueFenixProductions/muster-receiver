@@ -15,6 +15,18 @@ describe('buildPrompt', () => {
     expect(p).toMatch(/status\?/);
     expect(p).toMatch(/system\s+posts it for you/); // tells the agent not to self-post
   });
+
+  test('folds in recent conversation when context is supplied', () => {
+    const ctx = [
+      { author: 'Captain', text: 'should we bump rikudo ctx to 16k?' },
+      { author: 'hinata', text: 'bench says 16k is stable' },
+    ];
+    const p = buildPrompt(AGENT, MSG, { context: ctx });
+    expect(p).toMatch(/Recent conversation/);
+    expect(p).toMatch(/Captain: should we bump rikudo ctx to 16k\?/);
+    expect(p).toMatch(/hinata: bench says 16k is stable/);
+    expect(p).toMatch(/just @mentioned/);
+  });
 });
 
 describe('wakeAgent', () => {

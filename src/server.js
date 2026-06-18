@@ -17,6 +17,7 @@ const { URL } = require('url');
 const { parseWebhook, postReply } = require('./campfire');
 const { loadRoster, resolveAgent } = require('./roster');
 const { wakeAgent } = require('./agent');
+const { login, poll } = require('./console');
 
 const PORT = Number(process.env.MUSTER_PORT) || 8788;
 const BIND_HOST = process.env.MUSTER_BIND_HOST || '0.0.0.0';
@@ -58,12 +59,32 @@ async function postReplyResilient(base, replyPath, text) {
   }
 }
 
+// Fetch the last N room messages so a woken agent answers WITH the discussion in
+// view. Bots can't read, so this logs in as the read-user (MUSTER_CONSOLE_*). Off
+// when MUSTER_CONTEXT_MESSAGES is 0/unset or no read creds. Best-effort: any
+// failure just yields no context (the agent still answers the bare mention).
+async function fetchContext(base, roomId) {
+  const n = Number(process.env.MUSTER_CONTEXT_MESSAGES) || 0;
+  const email = process.env.MUSTER_CONSOLE_EMAIL;
+  const pw = process.env.MUSTER_CONSOLE_PASSWORD;
+  if (n <= 0 || !email || !pw || !roomId) return [];
+  try {
+    const jar = await login(base, email, pw);
+    const r = await poll(base, roomId, jar);
+    return r.messages.slice(-n);
+  } catch (e) {
+    console.error('[muster] context fetch failed (continuing bare):', (e && e.message) || e);
+    return [];
+  }
+}
+
 // Wake the agent and post its reply. Returns a small result for the log.
 async function handleMessage(agent, msg, base) {
-  const reply = await wakeAgent(agent, msg);
+  const context = await fetchContext(base, msg.roomId);
+  const reply = await wakeAgent(agent, msg, { context });
   if (!reply || !reply.trim()) return { action: 'empty-reply' };
   const res = await postReplyResilient(base, msg.replyPath, reply);
-  return { action: 'posted', status: res.status };
+  return { action: 'posted', status: res.status, context: context.length };
 }
 
 const server = http.createServer(async (req, res) => {

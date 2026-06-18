@@ -14,19 +14,27 @@ function agentTimeout(opts) {
   return (opts && opts.timeoutMs) || Number(process.env.AGENT_TIMEOUT_MS) || 120000;
 }
 
-function buildPrompt(agent, msg) {
-  return [
-    `You are "${agent.name}", a participant in the live muster war room`,
-    `(Campfire room: ${msg.roomName || 'muster'}). ${msg.user.name || 'Someone'} just addressed you:`,
-    '',
-    msg.text,
+function buildPrompt(agent, msg, opts = {}) {
+  const ctx = (opts.context || []).filter((m) => m && m.text);
+  const lines = [
+    `You are "${agent.name}", a participant in the live muster war room (Campfire room: ${msg.roomName || 'muster'}).`,
+  ];
+  if (ctx.length) {
+    lines.push('', 'Recent conversation (oldest first):');
+    for (const m of ctx) lines.push(`${m.author || 'someone'}: ${m.text}`);
+    lines.push('', 'You were just @mentioned. Reply to the message addressed to you, in the context above.');
+  } else {
+    lines.push(`${msg.user.name || 'Someone'} just addressed you:`, '', msg.text);
+  }
+  lines.push(
     '',
     'Write your reply to the room. Your reply is the text you output here — the system',
     'posts it for you automatically, so do NOT try to send it, do not mention webhooks,',
     'tokens, config files, or how messages are delivered. Just answer as yourself, in',
     'plain text: no preamble, no markdown fences, no sign-off. Be terse (1-3 sentences',
-    'unless more is clearly needed).',
-  ].join('\n');
+    'unless more is clearly needed).'
+  );
+  return lines.join('\n');
 }
 
 function wakeAgent(agent, msg, opts = {}) {
@@ -36,7 +44,7 @@ function wakeAgent(agent, msg, opts = {}) {
   const args = ['-p'];
   if (agent.persona) args.push('--append-system-prompt', agent.persona);
   if (agent.model) args.push('--model', agent.model);
-  const prompt = (opts.buildPrompt || buildPrompt)(agent, msg);
+  const prompt = (opts.buildPrompt || buildPrompt)(agent, msg, opts);
 
   return new Promise((resolve, reject) => {
     const child = _spawn(bin, args, { cwd: agent.cwd, stdio: ['pipe', 'pipe', 'pipe'] });
