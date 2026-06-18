@@ -1,6 +1,6 @@
 'use strict';
 const http = require('http');
-const { login, say, poll, parseMessages, mergeCookies, extractCsrfToken } = require('../src/console');
+const { login, say, poll, watch, parseMessages, mergeCookies, extractCsrfToken, ownIdFromBotKey, maxId } = require('../src/console');
 
 // Fixture mirroring the LIVE index HTML (captured 2026-06-17 from
 // campfire.bluefenix.net): container id is a UUID dom_id, the numeric id rides in
@@ -49,6 +49,41 @@ describe('parseMessages (grounded in the fork view)', () => {
 
   test('empty HTML → no messages', () => {
     expect(parseMessages('')).toEqual([]);
+  });
+});
+
+describe('watch (streaming poll)', () => {
+  test('ownIdFromBotKey + maxId helpers', () => {
+    expect(ownIdFromBotKey('9-tok')).toBe(9);
+    expect(ownIdFromBotKey('garbage')).toBeNull();
+    expect(maxId([{ id: 3 }, { id: 7 }, { id: 5 }], 0)).toBe(7);
+  });
+
+  test('primes from latest, streams fresh non-own messages, skips own, stops on --once', async () => {
+    const calls = [];
+    // call 0 = prime (no afterId) -> latest id 5
+    // call 1 = after 5 -> id6 is OWN (userId 9), id7 is someone else
+    const batches = [
+      { status: 200, messages: [{ id: 5, userId: 1, author: 'Captain', text: 'old' }] },
+      { status: 200, messages: [
+        { id: 6, userId: 9, author: 'me', text: 'my own echo' },
+        { id: 7, userId: 2, author: 'ironquill', text: 'aye' },
+      ] },
+    ];
+    const _poll = (base, room, cookie, afterId) => {
+      calls.push(afterId);
+      return Promise.resolve(batches[calls.length - 1]);
+    };
+    const seen = [];
+    const res = await watch({
+      base: 'x', roomId: 3, cookie: 'c', botKey: '9-tok',
+      once: true, onMessage: (m) => seen.push(m),
+      _poll, _sleep: () => Promise.resolve(), _now: () => 0,
+    });
+    expect(calls[0]).toBeUndefined(); // primed without afterId
+    expect(calls[1]).toBe(5); // then polled after the primed cursor
+    expect(seen.map((m) => m.id)).toEqual([7]); // id6 (own) skipped, id7 emitted
+    expect(res).toEqual({ stopped: 'once', cursor: 7 });
   });
 });
 

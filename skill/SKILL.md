@@ -100,7 +100,7 @@ The war-room I/O runs through `muster-receiver`'s tested CLI — `node $MUSTER_R
 **Flow:**
 1. **Preflight** — `curl -fsS "$MUSTER_BASE/up"` (Campfire healthy) and `muster-console login-check` (read creds valid). If config is missing or either fails, report exactly what's absent and fall back to LOG — never write a shared deck file for live chat (the racey pattern Campfire replaces).
 2. **Hail** the room, @mentioning the agents to summon so the receiver wakes them: `muster-console say "ahoy — $TOPIC (cc @ironquill)"`.
-3. **Bridge**: `muster-console poll [afterId]` returns new messages as JSON lines (`{id,userId,author,text}`); surface them to the Operator, post the Operator's replies back with `muster-console say "..."`, and advance the cursor to the newest `id`. Loop until the Operator stands down (`belay`, `done`, etc.).
+3. **Bridge**: stream the room with `muster-console watch [--for <sec>]` — it blocks and emits each new message (not your own) as a JSON line (`{id,userId,author,text}`) as it lands, so you can *wait* on the other agents instead of busy-polling. Surface them to the Operator; post replies with `muster-console say "..."`. (`muster-console poll [afterId]` is the one-shot form if you'd rather pull a batch and return the cursor.) Loop `watch`→`say` until the Operator stands down (`belay`, `done`, etc.). Tip: run `watch --for 60` between turns so a turn-based session blocks ~a minute for replies, then acts.
 4. **Verdict** → switch to **LOG**: synthesize the war-room conversation into a deck entry. The live layer is the conversation; the deck is the memory.
 
 ## Index

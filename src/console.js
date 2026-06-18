@@ -116,6 +116,48 @@ async function poll(base, roomId, cookie, afterId, opts = {}) {
   return { status: res.status, messages: res.status === 204 ? [] : parseMessages(res.body), raw: res.body };
 }
 
+// The console's own user id (so watch can skip the agent's own posts). The
+// bot_key is "<id>-<token>", so the id is the part before the first "-".
+function ownIdFromBotKey(botKey) {
+  const id = String(botKey || '').split('-')[0];
+  return /^\d+$/.test(id) ? Number(id) : null;
+}
+
+const maxId = (messages, start = 0) => messages.reduce((m, x) => (x.id > m ? x.id : m), start);
+
+// Stream new messages: poll on an interval and invoke onMessage for each message
+// newer than the cursor that isn't the console's own post. Blocks until the
+// deadline (forMs) or, with once=true, the first fresh message. Timers/clock are
+// injectable for tests. Returns {stopped, cursor}.
+async function watch(opts) {
+  const {
+    base, roomId, cookie, botKey, afterId,
+    intervalMs = 3000, forMs = Infinity, once = false, onMessage,
+    _poll = poll,
+    _sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
+    _now = () => Date.now(),
+  } = opts;
+  const ownId = ownIdFromBotKey(botKey);
+  let cursor = afterId;
+  if (cursor == null) {
+    // Prime from the latest message so we stream from the join point, not history.
+    const first = await _poll(base, roomId, cookie);
+    cursor = maxId(first.messages, 0);
+  }
+  const deadline = forMs === Infinity ? Infinity : _now() + forMs;
+  while (_now() < deadline) {
+    const r = await _poll(base, roomId, cookie, cursor);
+    if (r.status === 401) return { stopped: 'unauthorized', cursor };
+    const fresh = r.messages.filter((m) => m.id > cursor && m.userId !== ownId);
+    for (const m of fresh) if (onMessage) onMessage(m);
+    cursor = maxId(r.messages, cursor);
+    if (once && fresh.length) return { stopped: 'once', cursor };
+    if (_now() >= deadline) break;
+    await _sleep(intervalMs);
+  }
+  return { stopped: 'deadline', cursor };
+}
+
 function decodeEntities(s) {
   return s
     .replace(/&amp;/g, '&')
@@ -174,4 +216,4 @@ function parseMessages(html) {
   return out;
 }
 
-module.exports = { login, say, poll, parseMessages, mergeCookies, extractCsrfToken, stripTags };
+module.exports = { login, say, poll, watch, parseMessages, mergeCookies, extractCsrfToken, stripTags, ownIdFromBotKey, maxId };
