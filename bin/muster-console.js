@@ -80,6 +80,9 @@ async function main() {
         jar = await signIn();
         continue;
       }
+      // Emit the resume cursor so the JOIN loop threads it into the next watch
+      // (`watch <cursor> ...`) — no replay of messages already seen.
+      emit(`[watch] cursor=${cursor}`);
       return;
     }
   }
