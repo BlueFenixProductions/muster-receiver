@@ -11,7 +11,7 @@ function claudeBin(opts) {
 }
 
 function agentTimeout(opts) {
-  return (opts && opts.timeoutMs) || Number(process.env.AGENT_TIMEOUT_MS) || 120000;
+  return (opts && opts.timeoutMs) || Number(process.env.AGENT_TIMEOUT_MS) || 300000;
 }
 
 function buildPrompt(agent, msg, opts = {}) {
