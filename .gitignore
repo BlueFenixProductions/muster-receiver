@@ -1,0 +1,15 @@
+# Per-install config — never commit your endpoint/token values.
+config.env
+
+# Per-install roster — your agents' names, cwds, and personas stay local.
+# roster.example.json is committed; the real roster.json is not.
+roster.json
+
+# Rendered launchd artifact (from bin/*.plist.tmpl).
+*.plist
+!bin/*.plist.tmpl
+
+# Runtime logs (launchd stdout/stderr on Itachi).
+*.log
+
+node_modules/

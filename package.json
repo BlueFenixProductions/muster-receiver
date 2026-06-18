@@ -1,0 +1,19 @@
+{
+  "name": "muster-receiver",
+  "version": "0.1.0",
+  "description": "Ack-then-async Campfire webhook receiver for the muster war room. A bot @mention wakes a `claude -p` run as the addressed agent; the reply is posted back out-of-band. Tailnet-only, distinct identity per agent.",
+  "license": "MIT",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "start": "node src/server.js"
+  },
+  "keywords": ["campfire", "webhook", "muster", "war-room", "claude", "bot"],
+  "author": "BlueFenix Productions",
+  "devDependencies": {
+    "vitest": "^4.1.8"
+  }
+}
