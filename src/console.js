@@ -150,20 +150,26 @@ function innerOfDiv(html, fromIndex) {
 }
 
 // Parse Campfire's messages-index HTML into [{id, userId, author, text}].
+// Keyed on the stable data-* attributes, NOT element ids: verified live, the
+// container id is a UUID dom_id (message_<uuid>) while the numeric id rides in
+// data-message-id, and the body div is data-reply-target="body" (its id is
+// presentation_message_<uuid>). Keying on the targets survives both.
 function parseMessages(html) {
   const out = [];
-  const container = /<div id="message_(\d+)"[^>]*\bclass="message\b/g;
+  const container = /<div\b[^>]*\bdata-message-id="(\d+)"[^>]*>/g;
   const starts = [];
   let m;
-  while ((m = container.exec(html))) starts.push({ id: Number(m[1]), index: m.index });
+  while ((m = container.exec(html))) {
+    const userId = (m[0].match(/data-user-id="(\d+)"/) || [])[1];
+    starts.push({ id: Number(m[1]), userId: userId ? Number(userId) : null, index: m.index });
+  }
   for (let i = 0; i < starts.length; i++) {
     const slice = html.slice(starts[i].index, i + 1 < starts.length ? starts[i + 1].index : undefined);
-    const userId = (slice.match(/data-user-id="(\d+)"/) || [])[1];
     const authorM = slice.match(/data-reply-target="author"\s*>([\s\S]*?)<\/strong>/);
     const author = authorM ? stripTags(authorM[1]) : '';
-    const presM = slice.match(new RegExp(`id="message_${starts[i].id}_presentation"[^>]*>`));
-    const text = presM ? stripTags(innerOfDiv(slice, presM.index + presM[0].length)) : '';
-    out.push({ id: starts[i].id, userId: userId ? Number(userId) : null, author, text });
+    const bodyM = slice.match(/<div\b[^>]*\bdata-reply-target="body"[^>]*>/);
+    const text = bodyM ? stripTags(innerOfDiv(slice, bodyM.index + bodyM[0].length)) : '';
+    out.push({ id: starts[i].id, userId: starts[i].userId, author, text });
   }
   return out;
 }

@@ -2,20 +2,24 @@
 const http = require('http');
 const { login, say, poll, parseMessages, mergeCookies, extractCsrfToken } = require('../src/console');
 
-// Fixture mirroring the fork's app/views/messages/_message.html.erb +
-// messages_helper#message_tag (the real index HTML). If Campfire's view changes,
-// THIS must change too — that coupling is the point of pinning it here.
+// Fixture mirroring the LIVE index HTML (captured 2026-06-17 from
+// campfire.bluefenix.net): container id is a UUID dom_id, the numeric id rides in
+// data-message-id, and the body div is data-reply-target="body" with id
+// presentation_message_<uuid>. If Campfire's view changes, THIS must change too —
+// that coupling is the point of pinning it here.
 function messageHTML({ id, userId, author, bodyHTML }) {
+  const dom = `message_uuid-${id}`;
   return `
-<div id="message_${id}" class="message" data-controller="reply" data-user-id="${userId}" data-message-id="${id}" data-message-timestamp="123" data-messages-target="message">
+<div id="${dom}" class="message " data-controller="reply" data-user-id="${userId}" data-message-id="${id}" data-message-timestamp="123" data-messages-target="message">
+  <h2 class="message__day-separator"><time></time></h2>
   <figure class="avatar message__avatar"></figure>
-  <turbo-frame id="message_${id}_edit">
+  <turbo-frame id="edit_${dom}">
     <div class="message__body"><div class="message__body-content"><div class="message__meta">
       <h3 class="message__heading">
         <span class="message__author" title="${author}"><strong data-reply-target="author">${author}</strong></span>
       </h3>
     </div>
-    <div id="message_${id}_presentation" dir="auto" data-reply-target="body" data-messages-target="body">${bodyHTML}</div>
+    <div id="presentation_${dom}" dir="auto" data-reply-target="body" data-messages-target="body">${bodyHTML}</div>
     </div></div>
   </turbo-frame>
 </div>`;
